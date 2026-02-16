@@ -1,8 +1,55 @@
+import { logger } from './logger';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_TMDB_BASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 const IMAGE_BASE_URL = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE_URL;
 const BACKDROP_BASE_URL = process.env.NEXT_PUBLIC_TMDB_BACKDROP_BASE_URL;
 const VIDSRC_BASE_URL = process.env.NEXT_PUBLIC_VIDSRC_BASE_URL;
+
+// TMDB API Configuration
+const TMDB_BASE_URL = API_BASE_URL || '';
+const TMDB_API_KEY = API_KEY || '';
+const TMDB_IMAGE_BASE = IMAGE_BASE_URL || '';
+
+// Cache durations in seconds
+const CACHE_TIMES = {
+  SHORT: 60 * 5,        // 5 minutes (trending, search)
+  MEDIUM: 60 * 60,      // 1 hour (movie details)
+  LONG: 60 * 60 * 24,   // 24 hours (static content)
+};
+
+export function getOptimizedImageUrl(
+  path: string | null,
+  size: 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'w780' | 'original' = 'w500'
+): string {
+  if (!path) return '/placeholder.svg';
+  return `${TMDB_IMAGE_BASE}/${size}${path}`;
+}
+
+export async function fetchWithCache<T>(
+  endpoint: string,
+  cacheTime: number = CACHE_TIMES.MEDIUM
+): Promise<T> {
+  const url = `${TMDB_BASE_URL}${endpoint}${endpoint.includes('?') ? '&' : '?'}api_key=${TMDB_API_KEY}`;
+  
+  try {
+    const response = await fetch(url, {
+      next: { 
+        revalidate: cacheTime,
+        tags: ['tmdb'] 
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`TMDB API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    logger.error('TMDB fetch failed', { endpoint, error });
+    throw error;
+  }
+}
 
 if (!API_BASE_URL || !API_KEY) {
 	console.error(

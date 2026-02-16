@@ -1,10 +1,12 @@
 "use client";
 
-import { getImageUrl } from "@/lib/tmdb";
+import { getImageUrl, getMovieCredits } from "@/lib/tmdb";
 import type { CastMember } from "@/lib/tmdb";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRef } from "react";
 import Image from "next/image";
+import { OptimizedImage } from './optimized-image';
+import { Skeleton } from './ui/skeleton';
 
 interface CastListProps {
     cast: CastMember[];
@@ -78,4 +80,48 @@ export function CastList({ cast }: CastListProps) {
             </div>
         </div>
     );
+}
+
+export async function CastListAsync({ movieId }: { movieId: string }) {
+  const credits = await getMovieCredits(movieId);
+  const topCast = credits.cast.slice(0, 10);
+
+  return (
+    <section className="my-8">
+      <h2 className="text-2xl font-bold mb-4">Cast</h2>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {topCast.map((actor) => (
+          <div key={actor.id} className="text-center">
+            <div className="aspect-square relative rounded-full overflow-hidden mb-2">
+              <OptimizedImage
+                src={actor.profile_path}
+                alt={actor.name}
+                size="w185"
+                className="object-cover"
+              />
+            </div>
+            <p className="font-semibold text-sm">{actor.name}</p>
+            <p className="text-xs text-muted-foreground">{actor.character}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function CastListSkeleton() {
+  return (
+    <section className="my-8">
+      <Skeleton className="h-8 w-32 mb-4" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="text-center">
+            <Skeleton className="aspect-square rounded-full mb-2" />
+            <Skeleton className="h-4 w-full mb-1" />
+            <Skeleton className="h-3 w-3/4 mx-auto" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
