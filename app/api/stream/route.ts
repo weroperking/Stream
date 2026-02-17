@@ -12,7 +12,13 @@ const STREAM_DEBOUNCE_WINDOW_MS = Number.parseInt(
 );
 
 const STREAM_CACHE_TTL_MS = Number.parseInt(
-	process.env.STREAM_API_CACHE_TTL_MS ?? "3000",
+	process.env.STREAM_API_CACHE_TTL_MS ?? "1800000",
+	10
+);
+
+// Secondary TTL for verified working streams (60 minutes)
+const STREAM_CACHE_TTL_MS_VERIFIED = Number.parseInt(
+	process.env.STREAM_API_CACHE_TTL_MS_VERIFIED ?? "3600000",
 	10
 );
 
@@ -24,13 +30,18 @@ const inFlightByKey = new Map<
 
 const cacheByKey = new Map<
 	string,
-	{ storedAt: number; result: StreamHtmlResult }
+	{ storedAt: number; result: StreamHtmlResult; verified?: boolean }
 >();
+
+function getCacheTTL(verified?: boolean): number {
+	return verified ? STREAM_CACHE_TTL_MS_VERIFIED : STREAM_CACHE_TTL_MS;
+}
 
 function cleanupMaps(now: number) {
 	// Keep this intentionally lightweight.
 	for (const [key, entry] of cacheByKey.entries()) {
-		if (now - entry.storedAt > STREAM_CACHE_TTL_MS) cacheByKey.delete(key);
+		const ttl = getCacheTTL(entry.verified);
+		if (now - entry.storedAt > ttl) cacheByKey.delete(key);
 	}
 	for (const [key, entry] of inFlightByKey.entries()) {
 		// Safety: if something hangs, allow retries.
@@ -47,8 +58,9 @@ function buildHtmlResponse(result: StreamHtmlResult) {
 	const headers = new Headers();
 	headers.set("Content-Type", "text/html");
 
-	// Very short-lived cache hint; this primarily exists to avoid immediate refresh storms.
-	headers.set("Cache-Control", `private, max-age=0, must-revalidate`);
+	// Cache hint based on TTL; longer TTL for cached responses to reduce server load.
+	const maxAge = Math.floor(STREAM_CACHE_TTL_MS / 1000);
+	headers.set("Cache-Control", `public, max-age=${maxAge}, s-maxage=${maxAge}, stale-while-revalidate=${maxAge}`);
 
 	// CSP: Allow scripts/frames from the configured provider origin and self.
 	// Note: We use * for media/connect because video CDNs vary and rotate.
@@ -124,8 +136,11 @@ export async function GET(request: NextRequest) {
 	cleanupMaps(now);
 
 	const cached = cacheByKey.get(requestKey);
-	if (cached && now - cached.storedAt <= STREAM_CACHE_TTL_MS) {
-		return buildHtmlResponse(cached.result);
+	if (cached) {
+		const ttl = getCacheTTL(cached.verified);
+		if (now - cached.storedAt <= ttl) {
+			return buildHtmlResponse(cached.result);
+		}
 	}
 
 	const existingInFlight = inFlightByKey.get(requestKey);
@@ -215,7 +230,10 @@ export async function GET(request: NextRequest) {
 		inFlightByKey.delete(requestKey);
 
 		if (result.status === 200) {
-			cacheByKey.set(requestKey, { storedAt: Date.now(), result });
+			// Mark as verified if we've successfully cached this before (subsequent requests get longer TTL)
+			const existingEntry = cacheByKey.get(requestKey);
+			const isVerified = !!existingEntry?.verified;
+			cacheByKey.set(requestKey, { storedAt: Date.now(), result, verified: isVerified });
 		}
 
 		return buildHtmlResponse(result);

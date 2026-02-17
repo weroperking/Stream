@@ -3,6 +3,7 @@ import { MovieInfo } from "@/components/movie-info";
 import { Navbar } from "@/components/navbar";
 import { TVSeasonTabs } from "@/components/tv-season-tabs";
 import { TVWatchButton } from "@/components/tv-watch-button";
+import { SpeculativePreloader } from "@/components/speculative-preloader";
 import {
     getImageUrl,
     getBackdropUrl,
@@ -105,8 +106,9 @@ export default async function TVPage({ params, searchParams }: TVPageProps) {
     }, 0) || 0;
 
     return (
-        <div className="min-h-screen bg-background">
-            <Navbar />
+        <SpeculativePreloader movieId={tvId}>
+            <div className="min-h-screen bg-background">
+                <Navbar />
             
             {/* Hero Section with Backdrop */}
             <div className="relative w-full">
@@ -248,5 +250,6 @@ export default async function TVPage({ params, searchParams }: TVPageProps) {
                 <CastList cast={credits.cast} />
             </div>
         </div>
+        </SpeculativePreloader>
     );
 }

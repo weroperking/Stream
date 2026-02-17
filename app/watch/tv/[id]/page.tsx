@@ -11,12 +11,13 @@ interface WatchTVPageProps {
     searchParams: Promise<{
         season?: string;
         episode?: string;
+        provider?: string;
     }>;
 }
 
 export default async function WatchTVPage({ params, searchParams }: WatchTVPageProps) {
     const { id } = await params;
-    const { season, episode } = await searchParams;
+    const { season, episode, provider } = await searchParams;
     
     const tvId = Number(id);
     const currentSeason = season ? parseInt(season) : 1;
@@ -49,6 +50,7 @@ export default async function WatchTVPage({ params, searchParams }: WatchTVPageP
                 title={tvShow.name}
                 season={currentSeason}
                 episode={currentEpisode}
+                preferredProvider={provider}
             />
         </div>
     );

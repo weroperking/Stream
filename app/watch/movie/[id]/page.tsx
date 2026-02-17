@@ -8,11 +8,15 @@ interface WatchMoviePageProps {
     params: Promise<{
         id: string;
     }>;
+    searchParams: Promise<{
+        provider?: string;
+    }>;
 }
 
-export default async function WatchMoviePage({ params }: WatchMoviePageProps) {
+export default async function WatchMoviePage({ params, searchParams }: WatchMoviePageProps) {
     const { id } = await params;
     const movieId = Number(id);
+    const { provider } = await searchParams;
     
     // Server-side fetch to eliminate client-side lag
     const movie = await getMovieDetails(movieId);
@@ -40,6 +44,7 @@ export default async function WatchMoviePage({ params }: WatchMoviePageProps) {
                 type="movie"
                 title={movie.title}
                 runtime={movie.runtime}
+                preferredProvider={provider}
             />
         </div>
     );
