@@ -4,15 +4,17 @@ import { Navbar } from "@/components/navbar";
 import { TVSeasonTabs } from "@/components/tv-season-tabs";
 import { TVWatchButton } from "@/components/tv-watch-button";
 import { SpeculativePreloader } from "@/components/speculative-preloader";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     getImageUrl,
     getBackdropUrl,
-    getTVShowCredits,
     getTVShowDetails,
+    getTVShowCredits,
 } from "@/lib/tmdb";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Image from "next/image";
+import { Suspense } from "react";
 import { Clock, Calendar, Globe, Tv, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -62,55 +64,147 @@ export async function generateMetadata({
     };
 }
 
-export default async function TVPage({ params, searchParams }: TVPageProps) {
-    const { id } = await params;
-    const { season, episode } = await searchParams;
-    
-    const tvId = Number(id);
-    const tvShow = await getTVShowDetails(tvId);
+// ============================================================================
+// SKELETON COMPONENTS
+// ============================================================================
 
-    if (!tvShow) {
-        notFound();
-    }
-
-    // Get current season and episode from URL or default to 1,1
-    const currentSeason = season ? parseInt(season) : 1;
-    const currentEpisode = episode ? parseInt(episode) : 1;
-
-    const credits = await getTVShowCredits(tvId);
-    const movieAdapted = mapTVToMovie(tvShow);
-
-    // Type assertion for additional TV properties
-    const tv = tvShow as any;
-    
-    // Get production details
-    const firstAirYear = tv.first_air_date 
-        ? new Date(tv.first_air_date).getFullYear() 
-        : "N/A";
-    const lastAirYear = tv.last_air_date 
-        ? new Date(tv.last_air_date).getFullYear() 
-        : "N/A";
-    const yearRange = firstAirYear === lastAirYear 
-        ? firstAirYear 
-        : `${firstAirYear} - ${lastAirYear}`;
-
-    const releaseDate = tv.first_air_date 
-        ? new Date(tv.first_air_date).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        }) : "N/A";
-
-    const totalEpisodes = tv.seasons?.reduce((acc: number, season: any) => {
-        return acc + (season.episode_count || 0);
-    }, 0) || 0;
-
+function TVHeroSkeleton() {
     return (
-        <SpeculativePreloader movieId={tvId}>
-            <div className="min-h-screen bg-background">
-                <Navbar />
-            
-            {/* Hero Section with Backdrop */}
+        <div className="relative w-full">
+            {/* Backdrop Skeleton */}
+            <div className="absolute inset-0 w-full h-[80vh] md:h-[85vh] bg-muted animate-pulse" />
+
+            {/* Content Skeleton */}
+            <div className="relative z-10 pt-24">
+                <div className="max-w-[1800px] mx-auto px-4 md:px-8">
+                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+                        {/* Poster Skeleton */}
+                        <div className="hidden lg:block relative w-48 xl:w-56 flex-shrink-0 mt-8">
+                            <div className="relative aspect-[2/3] rounded-2xl overflow-hidden">
+                                <Skeleton className="w-full h-full" />
+                            </div>
+                        </div>
+
+                        {/* TV Show Info Skeleton */}
+                        <div className="flex-1 pt-8 lg:pt-16">
+                            {/* Badges Skeleton */}
+                            <div className="flex items-center gap-3 flex-wrap mb-4">
+                                <Skeleton className="h-7 w-24" />
+                                <Skeleton className="h-7 w-20" />
+                                <Skeleton className="h-7 w-24" />
+                            </div>
+
+                            {/* Title Skeleton */}
+                            <Skeleton className="h-12 w-3/4 mb-4" />
+
+                            {/* Episode Badge Skeleton */}
+                            <Skeleton className="h-6 w-20 mb-4" />
+
+                            {/* Meta Info Skeleton */}
+                            <div className="flex flex-wrap items-center gap-4 md:gap-6 mb-6">
+                                <Skeleton className="h-5 w-32" />
+                                <Skeleton className="h-5 w-28" />
+                                <Skeleton className="h-5 w-24" />
+                                <Skeleton className="h-5 w-16" />
+                            </div>
+
+                            {/* Overview Skeleton */}
+                            <Skeleton className="h-6 w-full mb-2" />
+                            <Skeleton className="h-6 w-5/6 mb-2" />
+                            <Skeleton className="h-6 w-4/6 mb-8" />
+
+                            {/* Watch Button Skeleton */}
+                            <Skeleton className="h-12 w-40" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function SeasonsSkeleton() {
+    return (
+        <div className="space-y-4">
+            <Skeleton className="h-8 w-48" />
+            <div className="flex gap-2 flex-wrap">
+                {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-24" />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function CastSkeleton() {
+    return (
+        <div className="space-y-4">
+            <Skeleton className="h-8 w-32" />
+            <div className="flex gap-4 overflow-hidden">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex-shrink-0">
+                        <Skeleton className="h-24 w-24 rounded-full" />
+                        <Skeleton className="h-4 w-20 mt-2" />
+                        <Skeleton className="h-3 w-16 mt-1" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ============================================================================
+// ASYNC SERVER COMPONENTS (EACH WITH ITS OWN SUSPENSE)
+// ============================================================================
+
+async function TVHero({ id, currentSeason, currentEpisode }: { 
+    id: string; 
+    currentSeason: number;
+    currentEpisode: number;
+}) {
+    try {
+        const tvId = Number(id);
+        const tvShow = await getTVShowDetails(tvId);
+
+        if (!tvShow) {
+            return (
+                <div className="relative w-full">
+                    <div className="absolute inset-0 w-full h-[80vh] md:h-[85vh] bg-muted" />
+                    <div className="relative z-10 pt-24">
+                        <div className="max-w-[1800px] mx-auto px-4 md:px-8">
+                            <p className="text-white">Could not load TV show info.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Type assertion for additional TV properties
+        const tv = tvShow as any;
+
+        // Get production details
+        const firstAirYear = tv.first_air_date 
+            ? new Date(tv.first_air_date).getFullYear() 
+            : "N/A";
+        const lastAirYear = tv.last_air_date 
+            ? new Date(tv.last_air_date).getFullYear() 
+            : "N/A";
+        const yearRange = firstAirYear === lastAirYear 
+            ? firstAirYear 
+            : `${firstAirYear} - ${lastAirYear}`;
+
+        const releaseDate = tv.first_air_date 
+            ? new Date(tv.first_air_date).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            }) : "N/A";
+
+        const totalEpisodes = tv.seasons?.reduce((acc: number, season: any) => {
+            return acc + (season.episode_count || 0);
+        }, 0) || 0;
+
+        return (
             <div className="relative w-full">
                 {/* Backdrop Image */}
                 <div className="absolute inset-0 w-full h-[80vh] md:h-[85vh]">
@@ -236,20 +330,133 @@ export default async function TVPage({ params, searchParams }: TVPageProps) {
                     </div>
                 </div>
             </div>
+        );
+    } catch (error) {
+        console.error("Error loading TV hero:", error);
+        return null;
+    }
+}
 
-            {/* TV Details Section */}
-            <div className="max-w-[1800px] mx-auto px-4 py-12 space-y-12">
-                <MovieInfo movie={movieAdapted} isTv={true} />
+async function TVDetails({ id }: { id: string }) {
+    try {
+        const tvId = Number(id);
+        const tvShow = await getTVShowDetails(tvId);
 
-                <TVSeasonTabs 
-                    tvId={tvId} 
-                    tvName={tvShow.name}
-                    seasons={tvShow.seasons || []} 
-                />
+        if (!tvShow) {
+            return null;
+        }
 
-                <CastList cast={credits.cast} />
+        const movieAdapted = mapTVToMovie(tvShow);
+
+        return (
+            <MovieInfo movie={movieAdapted} isTv={true} />
+        );
+    } catch (error) {
+        console.error("Error loading TV details:", error);
+        return null;
+    }
+}
+
+async function TVSeasons({ id, tvName }: { id: string; tvName?: string }) {
+    try {
+        const tvId = Number(id);
+        const tvShow = await getTVShowDetails(tvId);
+
+        if (!tvShow) {
+            return null;
+        }
+
+        const seasons = tvShow.seasons || [];
+        const name = tvName || tvShow.name;
+
+        if (seasons.length === 0) {
+            return null;
+        }
+
+        return (
+            <TVSeasonTabs 
+                tvId={tvId} 
+                tvName={name}
+                seasons={seasons} 
+            />
+        );
+    } catch (error) {
+        console.error("Error loading TV seasons:", error);
+        return null;
+    }
+}
+
+async function TVCast({ id }: { id: string }) {
+    try {
+        const tvId = Number(id);
+        const credits = await getTVShowCredits(tvId);
+
+        if (!credits || !credits.cast) {
+            return null;
+        }
+
+        return (
+            <CastList cast={credits.cast} />
+        );
+    } catch (error) {
+        console.error("Error loading TV cast:", error);
+        return null;
+    }
+}
+
+// ============================================================================
+// MAIN PAGE COMPONENT
+// ============================================================================
+
+export default async function TVPage({ params, searchParams }: TVPageProps) {
+    const { id } = await params;
+    const { season, episode } = await searchParams;
+
+    // Get current season and episode from URL or default to 1,1
+    const currentSeason = season ? parseInt(season) : 1;
+    const currentEpisode = episode ? parseInt(episode) : 1;
+
+    // TV show name for seasons component - will be fetched in TVHero first
+    // This is a fallback name that will be replaced once TVHero loads
+    const tvShowName = "TV Show";
+
+    return (
+        <SpeculativePreloader movieId={Number(id)}>
+            <div className="min-h-screen bg-background">
+                <Navbar />
+            
+                {/* Hero Section with Suspense */}
+                <Suspense fallback={<TVHeroSkeleton />}>
+                    <TVHero 
+                        id={id} 
+                        currentSeason={currentSeason}
+                        currentEpisode={currentEpisode}
+                    />
+                </Suspense>
+
+                {/* TV Details Section with Suspense */}
+                <div className="max-w-[1800px] mx-auto px-4 py-12 space-y-12">
+                    <Suspense fallback={
+                        <div className="space-y-4">
+                            <Skeleton className="h-8 w-48" />
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                        </div>
+                    }>
+                        <TVDetails id={id} />
+                    </Suspense>
+
+                    {/* Seasons with Suspense */}
+                    <Suspense fallback={<SeasonsSkeleton />}>
+                        <TVSeasons id={id} />
+                    </Suspense>
+
+                    {/* Cast with Suspense */}
+                    <Suspense fallback={<CastSkeleton />}>
+                        <TVCast id={id} />
+                    </Suspense>
+                </div>
             </div>
-        </div>
         </SpeculativePreloader>
     );
 }
