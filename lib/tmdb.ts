@@ -935,3 +935,173 @@ export async function getAllMoviesByGenre(genreId: number, maxPages: number = 5)
 		return [];
 	}
 }
+
+// ===========================================
+// Certification/Rating API Types and Functions
+// ===========================================
+
+// Release Dates API Response Types
+export interface ReleaseDatesResponse {
+	id: number;
+	results: ReleaseDatesCountry[];
+}
+
+export interface ReleaseDatesCountry {
+	iso_3166_1: string;
+	release_dates: ReleaseDate[];
+}
+
+export interface ReleaseDate {
+	certification: string;
+	description: string;
+	iso_639_1: string | null;
+	release_date: string;
+	release_type: number | null;
+	note: string;
+}
+
+// TV Content Ratings API Response Types
+export interface TVContentRatingsResponse {
+	id: number;
+	results: TVContentRating[];
+}
+
+export interface TVContentRating {
+	iso_3166_1: string;
+	rating: string;
+}
+
+/**
+ * Fetch release dates for a movie to get certification/rating
+ * API Endpoint: /movie/{movie_id}/release_dates
+ */
+export async function getMovieReleaseDates(movieId: number): Promise<ReleaseDatesResponse | null> {
+	try {
+		const response = await fetchWithRetry(
+			`${API_BASE_URL}/movie/${movieId}/release_dates?api_key=${API_KEY}`,
+			{ next: { revalidate: 86400 } } // Cache for 24 hours (release dates rarely change)
+		);
+		const data: ReleaseDatesResponse = await response.json();
+		return data;
+	} catch (error) {
+		console.error(`Error fetching release dates for movie ${movieId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Fetch content ratings for a TV show
+ * API Endpoint: /tv/{tv_id}/content_ratings
+ */
+export async function getTVContentRatings(tvId: number): Promise<TVContentRatingsResponse | null> {
+	try {
+		const response = await fetchWithRetry(
+			`${API_BASE_URL}/tv/${tvId}/content_ratings?api_key=${API_KEY}`,
+			{ next: { revalidate: 86400 } } // Cache for 24 hours
+		);
+		const data: TVContentRatingsResponse = await response.json();
+		return data;
+	} catch (error) {
+		console.error(`Error fetching content ratings for TV show ${tvId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Extract US certification from release dates
+ * Falls back to primary country's certification if US is not available
+ * @param releaseDates - The release dates response from TMDB
+ * @param preferredCountry - Preferred country code (default: 'US')
+ * @returns The certification string (e.g., 'PG-13', 'R', 'TV-MA') or null
+ */
+export function extractCertification(
+	releaseDates: ReleaseDatesResponse | null,
+	preferredCountry: string = 'US'
+): string | null {
+	if (!releaseDates || !releaseDates.results || releaseDates.results.length === 0) {
+		return null;
+	}
+
+	// First try to find the preferred country
+	const preferredResult = releaseDates.results.find(
+		(r) => r.iso_3166_1 === preferredCountry
+	);
+
+	if (preferredResult && preferredResult.release_dates && preferredResult.release_dates.length > 0) {
+		// Get the first release with a certification
+		const certifiedRelease = preferredResult.release_dates.find(
+			(r) => r.certification && r.certification.trim() !== ''
+		);
+
+		if (certifiedRelease) {
+			return certifiedRelease.certification.trim();
+		}
+
+		// If no certification found, return the first release date's certification (might be empty)
+		return preferredResult.release_dates[0]?.certification || null;
+	}
+
+	// Fallback: try to find any country with a certification
+	for (const country of releaseDates.results) {
+		if (country.release_dates && country.release_dates.length > 0) {
+			const certifiedRelease = country.release_dates.find(
+				(r) => r.certification && r.certification.trim() !== ''
+			);
+
+			if (certifiedRelease) {
+				return certifiedRelease.certification.trim();
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Extract TV content rating (e.g., TV-MA, TV-14)
+ * @param contentRatings - The content ratings response from TMDB
+ * @param preferredCountry - Preferred country code (default: 'US')
+ * @returns The rating string or null
+ */
+export function extractTVRating(
+	contentRatings: TVContentRatingsResponse | null,
+	preferredCountry: string = 'US'
+): string | null {
+	if (!contentRatings || !contentRatings.results || contentRatings.results.length === 0) {
+		return null;
+	}
+
+	// First try to find the preferred country
+	const preferredResult = contentRatings.results.find(
+		(r) => r.iso_3166_1 === preferredCountry
+	);
+
+	if (preferredResult && preferredResult.rating) {
+		return preferredResult.rating;
+	}
+
+	// Fallback: return first available rating
+	const firstResult = contentRatings.results[0];
+	return firstResult?.rating || null;
+}
+
+/**
+ * Get certification/rating for a movie or TV show
+ * @param id - The TMDB ID
+ * @param type - 'movie' or 'tv'
+ * @param preferredCountry - Preferred country code
+ * @returns The certification/rating string or null
+ */
+export async function getCertification(
+	id: number,
+	type: 'movie' | 'tv',
+	preferredCountry: string = 'US'
+): Promise<string | null> {
+	if (type === 'movie') {
+		const releaseDates = await getMovieReleaseDates(id);
+		return extractCertification(releaseDates, preferredCountry);
+	} else {
+		const contentRatings = await getTVContentRatings(id);
+		return extractTVRating(contentRatings, preferredCountry);
+	}
+}
