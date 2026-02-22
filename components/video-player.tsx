@@ -14,6 +14,14 @@ interface VideoPlayerProps {
     onEnded?: () => void;
     autoplay?: boolean;
     initialTime?: number;
+    /** Callback when time updates - receives current time in seconds */
+    onTimeUpdate?: (currentTime: number) => void;
+    /** Callback when video is paused */
+    onPause?: () => void;
+    /** Callback when user seeks - receives new time in seconds */
+    onSeek?: (time: number) => void;
+    /** Callback when duration is determined */
+    onDurationChange?: (duration: number) => void;
 }
 
 export function VideoPlayer({
@@ -26,6 +34,10 @@ export function VideoPlayer({
     onEnded,
     autoplay = false,
     initialTime = 0,
+    onTimeUpdate,
+    onPause,
+    onSeek,
+    onDurationChange,
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const playerRef = useRef<videojs.Player | null>(null);
@@ -99,7 +111,9 @@ export function VideoPlayer({
                 if (initialTime > 0) {
                     player.currentTime(initialTime);
                 }
-                setDuration(player.duration() || 0);
+                const dur = player.duration() || 0;
+                setDuration(dur);
+                onDurationChange?.(dur);
                 onReady?.();
             });
 
@@ -110,14 +124,24 @@ export function VideoPlayer({
 
             player.on("pause", () => {
                 setIsPaused(true);
+                onPause?.();
             });
 
             player.on("timeupdate", () => {
-                setCurrentTime(player.currentTime() || 0);
+                const time = player.currentTime() || 0;
+                setCurrentTime(time);
+                onTimeUpdate?.(time);
             });
 
             player.on("durationchange", () => {
-                setDuration(player.duration() || 0);
+                const dur = player.duration() || 0;
+                setDuration(dur);
+                onDurationChange?.(dur);
+            });
+
+            player.on("seeked", () => {
+                const time = player.currentTime() || 0;
+                onSeek?.(time);
             });
 
             player.on("progress", () => {
@@ -159,7 +183,7 @@ export function VideoPlayer({
                 }
             };
         });
-    }, [src, type, poster, autoplay, initialTime, onError, onReady, onEnded]);
+    }, [src, type, poster, autoplay, initialTime, onError, onReady, onEnded, onTimeUpdate, onPause, onSeek, onDurationChange]);
 
     // Handle keyboard shortcuts
     useEffect(() => {

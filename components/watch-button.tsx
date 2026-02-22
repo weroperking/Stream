@@ -1,26 +1,44 @@
 "use client";
 
-import { PlayCircle, Download, Zap, Loader2, CheckCircle2 } from "lucide-react";
+import { PlayCircle, Download, Zap, Loader2, CheckCircle2, Plus, Check } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
     getCachedProbingResults,
-    type ProbedProviderResult,
     type CachedProbingResults,
 } from "@/lib/providers";
+import { useWatchlist } from "@/hooks/use-watchlist";
 
 interface WatchButtonProps {
     movieId: number;
     title: string;
+    posterPath?: string | null;
+    mediaType?: "movie" | "tv";
     showDownload?: boolean;
+    showWatchlist?: boolean;
 }
 
-export function WatchButton({ movieId, title, showDownload = true }: WatchButtonProps) {
+export function WatchButton({ 
+    movieId, 
+    title, 
+    posterPath,
+    mediaType = "movie",
+    showDownload = true,
+    showWatchlist = true 
+}: WatchButtonProps) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [probingResults, setProbingResults] = useState<CachedProbingResults | null>(null);
     const [isCheckingCache, setIsCheckingCache] = useState(true);
+
+    const { 
+        isSaved, 
+        toggleSave, 
+        isPending, 
+        hasActiveProfile,
+        loading: watchlistLoading 
+    } = useWatchlist();
 
     // Check for cached probing results on mount
     useEffect(() => {
@@ -33,32 +51,49 @@ export function WatchButton({ movieId, title, showDownload = true }: WatchButton
 
     const handleWatchClick = (e: React.MouseEvent) => {
         // Prefetch the watch page for smoother transition
-        router.prefetch(`/watch/movie/${movieId}`);
+        router.prefetch(`/watch/${mediaType}/${movieId}`);
         
         // If we have a preloaded provider, we could pass it via query params
-        // For now, we'll use the cached results in the watch page
         if (probingResults?.fastestProvider) {
-            router.push(`/watch/movie/${movieId}?provider=${probingResults.fastestProvider.providerId}`);
+            router.push(`/watch/${mediaType}/${movieId}?provider=${probingResults.fastestProvider.providerId}`);
         } else {
-            router.push(`/watch/movie/${movieId}`);
+            router.push(`/watch/${mediaType}/${movieId}`);
         }
     };
 
+    const handleWatchlistToggle = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (!hasActiveProfile) {
+            return;
+        }
+
+        await toggleSave({
+            id: movieId,
+            title,
+            poster_path: posterPath,
+            mediaType,
+        });
+    };
+
     const fastestProvider = probingResults?.fastestProvider;
+    const isInWatchlist = isSaved(movieId, mediaType);
+    const isWatchlistPending = isPending(movieId, mediaType);
 
     return (
         <div className="flex flex-wrap items-center gap-4">
             <div className="flex flex-col gap-1">
                 <Link
-                    href={`/watch/movie/${movieId}${fastestProvider ? `?provider=${fastestProvider.providerId}` : ''}`}
+                    href={`/watch/${mediaType}/${movieId}${fastestProvider ? `?provider=${fastestProvider.providerId}` : ''}`}
                     onClick={(e) => {
                         // Start prefetching immediately
-                        router.prefetch(`/watch/movie/${movieId}`);
+                        router.prefetch(`/watch/${mediaType}/${movieId}`);
                         
                         if (fastestProvider) {
                             // Use fastest provider URL
                             e.preventDefault();
-                            router.push(`/watch/movie/${movieId}?provider=${fastestProvider.providerId}`);
+                            router.push(`/watch/${mediaType}/${movieId}?provider=${fastestProvider.providerId}`);
                         }
                     }}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-all hover:scale-105 shadow-lg shadow-primary/30"
@@ -92,6 +127,36 @@ export function WatchButton({ movieId, title, showDownload = true }: WatchButton
                     </div>
                 )}
             </div>
+
+            {/* Watchlist Button */}
+            {showWatchlist && (
+                <button
+                    onClick={handleWatchlistToggle}
+                    disabled={!hasActiveProfile || isWatchlistPending || watchlistLoading}
+                    className={`inline-flex items-center gap-2 px-6 py-3 font-semibold rounded-full transition-all hover:scale-105 ${
+                        !hasActiveProfile 
+                            ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                            : isInWatchlist
+                                ? "bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30"
+                                : "bg-white/10 text-white border border-white/20 hover:bg-white/20"
+                    }`}
+                    title={!hasActiveProfile ? "Select a profile to add to your list" : isInWatchlist ? "Remove from My List" : "Add to My List"}
+                >
+                    {isWatchlistPending ? (
+                        <Loader2 size={18} className="animate-spin" />
+                    ) : isInWatchlist ? (
+                        <Check size={18} />
+                    ) : (
+                        <Plus size={18} />
+                    )}
+                    {isWatchlistPending 
+                        ? "Updating..." 
+                        : isInWatchlist 
+                            ? "In My List" 
+                            : "My List"
+                    }
+                </button>
+            )}
             
             {showDownload && (
                 <button

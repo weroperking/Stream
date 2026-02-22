@@ -657,6 +657,78 @@ export async function updateProfile(data: UpdateProfileData): Promise<{
 }
 
 /**
+ * Update account information (username, full name, bio, language)
+ * Used in the account settings page
+ */
+export async function updateAccountInfo(data: {
+  username?: string;
+  fullName?: string;
+  bio?: string;
+  language?: string;
+}): Promise<{ success: boolean; error: string | null; profile?: Profile }> {
+  const supabase = await createClient();
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return { success: false, error: AUTH_ERRORS.SESSION_EXPIRED };
+  }
+  
+  // Build update object with only provided fields
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (data.username !== undefined) {
+    // Validate username format
+    const username = data.username.trim().toLowerCase();
+    if (username && !/^[a-z0-9_]{3,20}$/.test(username)) {
+      return { 
+        success: false, 
+        error: 'Username must be 3-20 characters and contain only letters, numbers, and underscores' 
+      };
+    }
+    updateData.username = username || null;
+  }
+  
+  if (data.fullName !== undefined) {
+    updateData.full_name = data.fullName.trim() || null;
+  }
+  
+  if (data.bio !== undefined) {
+    updateData.bio = data.bio.trim() || null;
+  }
+  
+  if (data.language !== undefined) {
+    updateData.language = data.language;
+  }
+  
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .update(updateData)
+    .eq('id', user.id)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('[updateAccountInfo] Error updating profile:', error);
+    
+    // Handle unique constraint violation for username
+    if (error.code === '23505' && error.message.includes('username')) {
+      return { success: false, error: 'This username is already taken' };
+    }
+    
+    return { success: false, error: error.message };
+  }
+  
+  revalidatePath('/account');
+  revalidatePath('/profile');
+  
+  return { success: true, error: null, profile };
+}
+
+/**
  * Update onboarding step
  */
 export async function updateOnboardingStep(step: UpdateProfileData['onboarding_step']): Promise<{ 
@@ -861,32 +933,45 @@ export async function createUserProfile(data: CreateUserProfileData): Promise<{
 export async function getUserProfiles(): Promise<UserProfile[]> {
   const supabase = await createClient();
   
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  console.log('[getUserProfiles] Auth check:', { 
+    userId: user?.id, 
+    authError: authError?.message 
+  });
   
   if (!user) {
+    console.log('[getUserProfiles] No user found, returning empty array');
     return [];
   }
 
-  // Get profiles with avatar_url only (not avatar_style)
+  // Get profiles with all fields including is_active
   const { data: profiles, error } = await supabase
     .from('user_profiles')
-    .select('id, user_id, name, avatar_url, custom_avatar_url, is_main, is_active, created_at, updated_at')
+    .select('id, user_id, name, avatar_url, custom_avatar_url, is_main, is_active, pin_location, created_at, updated_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true });
   
+  console.log('[getUserProfiles] Query result:', { 
+    profileCount: profiles?.length || 0, 
+    error: error?.message,
+    profiles: profiles?.map(p => ({ id: p.id, name: p.name }))
+  });
+  
   if (error) {
-    console.error('Error fetching profiles:', error);
+    console.error('[getUserProfiles] Error fetching profiles:', error);
     return [];
   }
   
   return (profiles || []).map(p => ({
     ...p,
-    avatar_style: 'default',
+    avatar_style: 'default' as const,
     avatar_color: '',
     pin_hash: null,
     is_locked: false,
     preferences: {},
-    onboarding_step: 'pending'
+    onboarding_step: 'pending' as const,
+    pin_location: p.pin_location || null
   }));
 }
 
@@ -968,6 +1053,151 @@ export async function deleteUserProfile(profileId: string): Promise<{
   revalidatePath('/onboarding');
   
   return { success: true, error: null };
+}
+
+/**
+ * Set the active profile for the current user
+ * This updates the is_active field on user_profiles to track which profile is currently in use
+ */
+export async function setActiveProfile(profileId: string): Promise<{ 
+  success: boolean; 
+  profile: UserProfile | null;
+  error: Error | null;
+}> {
+  const supabase = await createClient();
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return { 
+      success: false, 
+      profile: null,
+      error: new Error(AUTH_ERRORS.SESSION_EXPIRED) 
+    };
+  }
+  
+  // First, verify the profile belongs to this user
+  const { data: existingProfile } = await supabase
+    .from('user_profiles')
+    .select('id, user_id')
+    .eq('id', profileId)
+    .eq('user_id', user.id)
+    .single();
+  
+  if (!existingProfile) {
+    return { 
+      success: false, 
+      profile: null,
+      error: new Error('Profile not found or does not belong to user') 
+    };
+  }
+  
+  // Set all profiles to inactive for this user
+  const { error: updateAllError } = await supabase
+    .from('user_profiles')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('user_id', user.id);
+  
+  if (updateAllError) {
+    console.error('Error deactivating profiles:', updateAllError);
+    return { 
+      success: false, 
+      profile: null,
+      error: updateAllError 
+    };
+  }
+  
+  // Set selected profile to active
+  const { data: updatedProfile, error: updateError } = await supabase
+    .from('user_profiles')
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq('id', profileId)
+    .eq('user_id', user.id)
+    .select()
+    .single();
+  
+  if (updateError) {
+    console.error('Error activating profile:', updateError);
+    return { 
+      success: false, 
+      profile: null,
+      error: updateError 
+    };
+  }
+  
+  revalidatePath('/onboarding');
+  revalidatePath('/profiles');
+  revalidatePath('/');
+  
+  return { 
+    success: true, 
+    profile: updatedProfile,
+    error: null 
+  };
+}
+
+/**
+ * Get the active profile for the current user
+ * Falls back to main profile or first profile if no active profile is set
+ */
+export async function getActiveProfile(): Promise<UserProfile | null> {
+  const supabase = await createClient();
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return null;
+  }
+  
+  // First try to get the active profile
+  const { data: activeProfile } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .single();
+  
+  if (activeProfile) {
+    return activeProfile;
+  }
+  
+  // Fall back to main profile
+  const { data: mainProfile } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('is_main', true)
+    .single();
+  
+  if (mainProfile) {
+    // Set this profile as active for future requests
+    await supabase
+      .from('user_profiles')
+      .update({ is_active: true })
+      .eq('id', mainProfile.id);
+    return mainProfile;
+  }
+  
+  // Fall back to first profile
+  const { data: firstProfile } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+  
+  if (firstProfile) {
+    // Set this profile as active for future requests
+    await supabase
+      .from('user_profiles')
+      .update({ is_active: true })
+      .eq('id', firstProfile.id);
+    return firstProfile;
+  }
+  
+  return null;
 }
 
 // ============================================================================

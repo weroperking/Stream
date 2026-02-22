@@ -85,7 +85,7 @@ export interface ContentPreference {
 }
 
 /**
- * Watch history entry
+ * Watch history entry (legacy - prefer WatchHistoryEntry)
  */
 export interface WatchHistoryItem {
   id: string;
@@ -102,7 +102,7 @@ export interface WatchHistoryItem {
 }
 
 /**
- * Watchlist item
+ * Watchlist item (legacy - prefer WatchlistEntry)
  */
 export interface WatchlistItem {
   id: string;
@@ -111,6 +111,69 @@ export interface WatchlistItem {
   tmdb_id: number;
   content_type: ContentType;
   created_at: string;
+}
+
+// ============================================================================
+// Profile-Based Data Types (matching 002_profile_data_segregation.sql)
+// ============================================================================
+
+/**
+ * Watch history entry - matches watch_history table schema
+ * Used for profile-based watch history tracking
+ */
+export interface WatchHistoryEntry {
+  id: string;
+  user_id: string;
+  profile_id: string;
+  tmdb_id: number;
+  content_type: ContentType;
+  season_number: number | null;
+  episode_number: number | null;
+  progress: number;
+  duration: number | null;
+  completed: boolean;
+  last_watched_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Watchlist entry - matches watchlist table schema
+ * Used for profile-based watchlist management
+ */
+export interface WatchlistEntry {
+  id: string;
+  user_id: string;
+  profile_id: string;
+  tmdb_id: number;
+  content_type: ContentType;
+  poster_path: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Input type for adding items to watchlist
+ */
+export interface AddToWatchlistInput {
+  mediaId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  posterPath?: string;
+}
+
+/**
+ * Input type for updating watch progress
+ */
+export interface UpdateWatchProgressInput {
+  mediaId: number;
+  mediaType: 'movie' | 'tv';
+  seasonNumber?: number;
+  episodeNumber?: number;
+  progress: number;
+  duration?: number;
+  completed?: boolean;
 }
 
 /**
@@ -171,6 +234,9 @@ export interface SignInCredentials {
  */
 export interface UpdateProfileData {
   full_name?: string | null;
+  username?: string | null;
+  bio?: string | null;
+  language?: string | null;
   avatar_url?: string | null;
   onboarding_step?: OnboardingStep;
   onboarding_completed?: boolean;

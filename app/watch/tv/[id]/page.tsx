@@ -1,5 +1,7 @@
 import { MediaPlayer } from "@/components/media-player";
 import { getTVShowDetails } from "@/lib/tmdb";
+import { getMediaProgress } from "@/lib/watch-history-actions";
+import { getActiveProfile } from "@/app/actions/auth";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -30,6 +32,26 @@ export default async function WatchTVPage({ params, searchParams }: WatchTVPageP
         notFound();
     }
 
+    // Fetch existing watch progress for the TV episode
+    let initialProgress = null;
+    try {
+        const activeProfile = await getActiveProfile();
+        if (activeProfile?.id) {
+            const progressResult = await getMediaProgress(
+                activeProfile.id,
+                tvId,
+                'tv',
+                currentSeason,
+                currentEpisode
+            );
+            if (progressResult.success && progressResult.data) {
+                initialProgress = progressResult.data;
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching watch progress:', error);
+    }
+
     return (
         <div className="min-h-screen bg-background">
             {/* Back Navigation */}
@@ -51,6 +73,7 @@ export default async function WatchTVPage({ params, searchParams }: WatchTVPageP
                 season={currentSeason}
                 episode={currentEpisode}
                 preferredProvider={provider}
+                initialProgress={initialProgress}
             />
         </div>
     );

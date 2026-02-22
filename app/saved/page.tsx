@@ -4,7 +4,10 @@ import { Suspense } from "react";
 import { HorizontalMovieRow } from "@/components/horizontal-movie-row";
 import { Navbar } from "@/components/navbar";
 import { useWatchlist } from "@/hooks/use-watchlist";
+import { useAuth } from "@/components/providers/auth-provider";
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
+import Link from "next/link";
 
 // ===========================================
 // Skeleton Components (Inline Fallbacks)
@@ -73,24 +76,173 @@ function EmptyStateSkeleton() {
 }
 
 // ===========================================
+// No Profile Selected State
+// ===========================================
+
+function NoProfileState() {
+	return (
+		<main className="min-h-screen bg-black text-white">
+			<div className="pt-20 pb-8">
+				<div className="px-4 md:px-12 mb-8">
+					<div className="flex items-center gap-4">
+						<h1 className="text-4xl md:text-5xl font-bold font-display-title">My List</h1>
+					</div>
+					<p className="text-gray-400 mt-2">
+						Your saved movies and TV shows
+					</p>
+				</div>
+
+				<div className="flex flex-col items-center justify-center py-20 text-center px-4">
+					<div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mb-6">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="32"
+							height="32"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							className="text-gray-400"
+						>
+							<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+							<circle cx="12" cy="7" r="4" />
+						</svg>
+					</div>
+					<h2 className="text-2xl font-semibold mb-3">
+						Select a Profile
+					</h2>
+					<p className="text-gray-400 max-w-md mb-6">
+						Please select a profile to view your saved movies and TV shows.
+					</p>
+					<Link
+						href="/profiles"
+						className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-all"
+					>
+						Go to Profiles
+					</Link>
+				</div>
+			</div>
+		</main>
+	);
+}
+
+// ===========================================
+// Error State
+// ===========================================
+
+function ErrorState({ error }: { error: string }) {
+	return (
+		<main className="min-h-screen bg-black text-white">
+			<div className="pt-20 pb-8">
+				<div className="px-4 md:px-12 mb-8">
+					<div className="flex items-center gap-4">
+						<h1 className="text-4xl md:text-5xl font-bold font-display-title">My List</h1>
+					</div>
+					<p className="text-gray-400 mt-2">
+						Your saved movies and TV shows
+					</p>
+				</div>
+
+				<div className="flex flex-col items-center justify-center py-20 text-center px-4">
+					<div className="w-20 h-20 bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="32"
+							height="32"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							className="text-red-400"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<line x1="12" y1="8" x2="12" y2="12" />
+							<line x1="12" y1="16" x2="12.01" y2="16" />
+						</svg>
+					</div>
+					<h2 className="text-2xl font-semibold mb-3">
+						Something went wrong
+					</h2>
+					<p className="text-gray-400 max-w-md mb-6">
+						{error || "Failed to load your watchlist. Please try again later."}
+					</p>
+					<button
+						onClick={() => window.location.reload()}
+						className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-full hover:bg-primary/90 transition-all"
+					>
+						Try Again
+					</button>
+				</div>
+			</div>
+		</main>
+	);
+}
+
+// ===========================================
+// Loading State
+// ===========================================
+
+function LoadingState() {
+	return (
+		<main className="min-h-screen bg-black text-white">
+			<div className="pt-20 pb-8">
+				<div className="px-4 md:px-12 mb-8">
+					<div className="flex items-center gap-4">
+						<h1 className="text-4xl md:text-5xl font-bold font-display-title">My List</h1>
+					</div>
+					<p className="text-gray-400 mt-2">
+						Your saved movies and TV shows
+					</p>
+				</div>
+
+				<div className="flex flex-col items-center justify-center py-20 text-center px-4">
+					<Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+					<p className="text-gray-400">Loading your watchlist...</p>
+				</div>
+			</div>
+		</main>
+	);
+}
+
+// ===========================================
 // Client Component for Watchlist Content
 // ===========================================
 
 function WatchlistContent() {
-	const { savedMovies } = useWatchlist();
+	const { savedMovies, loading, error, hasActiveProfile } = useWatchlist();
+	const { loading: authLoading } = useAuth();
 	const [isMounted, setIsMounted] = useState(false);
 
 	useEffect(() => {
 		setIsMounted(true);
 	}, []);
 
-	if (!isMounted) {
+	if (!isMounted || authLoading) {
 		return <EmptyStateSkeleton />;
 	}
 
+	// Show no profile state if no active profile
+	if (!hasActiveProfile) {
+		return <NoProfileState />;
+	}
+
+	// Show loading state
+	if (loading) {
+		return <LoadingState />;
+	}
+
+	// Show error state
+	if (error) {
+		return <ErrorState error={error} />;
+	}
+
 	// Separate movies and TV shows
-	const movies = savedMovies.filter((item) => !("name" in item) && !("first_air_date" in item));
-	const tvShows = savedMovies.filter((item) => ("name" in item) || ("first_air_date" in item));
+	const movies = savedMovies.filter((item) => item.mediaType === "movie");
+	const tvShows = savedMovies.filter((item) => item.mediaType === "tv");
 
 	if (savedMovies.length === 0) {
 		return (
@@ -157,13 +309,13 @@ function WatchlistContent() {
 					{movies.length > 0 && (
 						<HorizontalMovieRow
 							title="Saved Movies"
-							movies={movies}
+							movies={movies as any}
 						/>
 					)}
 					{tvShows.length > 0 && (
 						<HorizontalMovieRow
 							title="Saved TV Shows"
-							movies={tvShows}
+							movies={tvShows as any}
 						/>
 					)}
 				</div>

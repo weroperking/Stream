@@ -1,9 +1,11 @@
 "use client";
 
 import { providers, type Provider, type ProviderTier } from "@/lib/providers";
-import { Play, ChevronDown, MonitorPlay, Wifi, WifiOff, Loader2, CheckCircle2, XCircle, ChevronRight, Zap, Film } from "lucide-react";
+import { Play, ChevronDown, MonitorPlay, Wifi, WifiOff, Loader2, CheckCircle2, XCircle, ChevronRight, Zap, Film, RotateCcw } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { VideoPlayer } from "./video-player";
+import { useProgressTracker } from "@/hooks/use-watch-history";
+import type { WatchHistoryEntry } from "@/lib/auth-types";
 
 // Premium brand name mappings - maps provider IDs to exclusive brand names
 const PREMIUM_BRANDS: Record<string, { name: string; tagline: string }> = {
@@ -52,6 +54,8 @@ interface MediaPlayerProps {
     episode?: number;
     runtime?: number;
     preferredProvider?: string;
+    /** Existing watch progress entry for resume functionality */
+    initialProgress?: WatchHistoryEntry | null;
 }
 
 export function MediaPlayer({
@@ -62,6 +66,7 @@ export function MediaPlayer({
     episode = 1,
     runtime,
     preferredProvider,
+    initialProgress,
 }: MediaPlayerProps) {
     const [showPlayer, setShowPlayer] = useState(true); // Auto-show player
     const [currentProvider, setCurrentProvider] = useState<Provider>(() => {
@@ -84,6 +89,12 @@ export function MediaPlayer({
     const [isExtracting, setIsExtracting] = useState(false);
     const [extractionFailed, setExtractionFailed] = useState(false);
     const [useCustomPlayer, setUseCustomPlayer] = useState(false);
+    
+    // Watch history state
+    const [videoDuration, setVideoDuration] = useState(runtime ? runtime * 60 : 0);
+    const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+    const [showResumePrompt, setShowResumePrompt] = useState(false);
+    const [hasResumed, setHasResumed] = useState(false);
 
     const streamUrl =
         type === "movie"
@@ -92,6 +103,40 @@ export function MediaPlayer({
 
     // Get premium brand info for current provider
     const currentBrand = getPremiumBrand(currentProvider.id);
+    
+    // Calculate resume time from initial progress
+    const resumeTime = initialProgress?.duration && initialProgress?.progress
+        ? (initialProgress.progress / 100) * initialProgress.duration
+        : 0;
+    const shouldShowResumePrompt = initialProgress && 
+        !initialProgress.completed && 
+        resumeTime > 30 && 
+        !hasResumed;
+    
+    // Progress tracker hook
+    const {
+        handleTimeUpdate,
+        handlePause,
+        handleSeek,
+        handleEnded,
+        saveProgress,
+        calculateProgress,
+        hasMarkedCompleted,
+    } = useProgressTracker({
+        mediaId,
+        mediaType: type,
+        seasonNumber: season,
+        episodeNumber: episode,
+        duration: videoDuration,
+        saveInterval: 15000, // Save every 15 seconds
+        completionThreshold: 90,
+        onProgressSaved: (progress) => {
+            console.log(`Progress saved: ${progress}%`);
+        },
+        onCompleted: () => {
+            console.log("Media marked as completed");
+        },
+    });
 
     // Auto-failover logic - try next provider on failure
     const tryNextProvider = useCallback(() => {
@@ -379,6 +424,38 @@ export function MediaPlayer({
                         </div>
                     ) : (
                         <div className="relative w-full h-full">
+                            {/* Resume Prompt */}
+                            {shouldShowResumePrompt && !showResumePrompt && (
+                                <div className="absolute inset-0 z-30 bg-black/80 flex items-center justify-center">
+                                    <div className="bg-card/95 backdrop-blur-sm rounded-2xl p-6 md:p-8 max-w-md mx-4 border border-border shadow-2xl">
+                                        <h3 className="text-xl font-bold text-foreground mb-2">Resume Watching?</h3>
+                                        <p className="text-muted-foreground mb-4">
+                                            You were at {Math.floor(resumeTime / 60)}:{String(Math.floor(resumeTime % 60)).padStart(2, '0')} ({initialProgress?.progress}% complete)
+                                        </p>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => {
+                                                    setHasResumed(true);
+                                                    setShowResumePrompt(true);
+                                                }}
+                                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                                            >
+                                                <RotateCcw size={18} />
+                                                Resume
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setHasResumed(true);
+                                                    setShowResumePrompt(true);
+                                                }}
+                                                className="flex-1 px-4 py-3 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors"
+                                            >
+                                                Start Over
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             {/* Custom Video Player */}
                             {useCustomPlayer && extractedUrl ? (
                                 <div className="relative w-full h-full">
@@ -386,6 +463,17 @@ export function MediaPlayer({
                                         src={extractedUrl}
                                         type={extractedUrl.includes(".m3u8") ? "hls" : "mp4"}
                                         title={title}
+                                        initialTime={hasResumed && initialProgress?.progress && initialProgress?.duration 
+                                            ? (initialProgress.progress / 100) * initialProgress.duration 
+                                            : 0}
+                                        onTimeUpdate={(time) => {
+                                            setVideoCurrentTime(time);
+                                            handleTimeUpdate(time);
+                                        }}
+                                        onPause={() => handlePause(videoCurrentTime)}
+                                        onSeek={(time) => handleSeek(time)}
+                                        onEnded={handleEnded}
+                                        onDurationChange={(dur) => setVideoDuration(dur)}
                                         onError={() => {
                                             // Fall back to iframe on error
                                             setUseCustomPlayer(false);

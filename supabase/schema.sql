@@ -161,8 +161,8 @@ CREATE TABLE public.watch_history (
   -- Reference to the user
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   
-  -- Reference to profile (optional)
-  profile_id UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  -- Reference to profile (required for data segregation)
+  profile_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
   
   -- TMDB content ID
   tmdb_id INTEGER NOT NULL,
@@ -174,17 +174,24 @@ CREATE TABLE public.watch_history (
   season_number INTEGER,
   episode_number INTEGER,
   
-  -- Watch progress (percentage)
-  progress INTEGER DEFAULT 0,
+  -- Watch progress (percentage 0-100)
+  progress DECIMAL(5,2) DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+  
+  -- Total duration in seconds (for resume functionality)
+  duration INTEGER,
   
   -- Whether the content was completed
-  completed BOOLEAN DEFAULT FALSE,
+  completed BOOLEAN DEFAULT FALSE NOT NULL,
   
   -- Last watched timestamp
-  last_watched_at TIMESTAMPTZ DEFAULT NOW(),
+  last_watched_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   
-  -- Created at
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  
+  -- Unique constraint: one watch history entry per profile/media/season/episode combination
+  CONSTRAINT watch_history_profile_media_unique UNIQUE (profile_id, tmdb_id, content_type, season_number, episode_number)
 );
 
 -- ---------------------------------------------------------------------------
@@ -198,8 +205,8 @@ CREATE TABLE public.watchlist (
   -- Reference to the user
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   
-  -- Reference to profile (optional)
-  profile_id UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  -- Reference to profile (required for data segregation)
+  profile_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
   
   -- TMDB content ID
   tmdb_id INTEGER NOT NULL,
@@ -208,10 +215,10 @@ CREATE TABLE public.watchlist (
   content_type TEXT NOT NULL CHECK (content_type IN ('movie', 'tv')),
   
   -- Added to watchlist at
-  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   
-  -- Unique constraint
-  UNIQUE(user_id, tmdb_id)
+  -- Unique constraint: one watchlist entry per profile/media combination
+  CONSTRAINT watchlist_profile_media_unique UNIQUE (profile_id, tmdb_id, content_type)
 );
 
 -- ============================================================================

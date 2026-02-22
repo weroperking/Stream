@@ -2,7 +2,7 @@
 
 import { getSeasonDetails, getTVShowDetails } from "@/app/actions";
 import { getImageUrl, getVidSrcUrl, type Movie, type Season, type Episode, type TVShowDetails } from "@/lib/tmdb";
-import { X, Play, ChevronDown, Check, Plus, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { X, Play, ChevronDown, Check, Plus, Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
@@ -23,9 +23,16 @@ export function MoreInfoModal({ movie, isOpen, onClose }: MoreInfoModalProps) {
     const [isSeasonDropdownOpen, setIsSeasonDropdownOpen] = useState(false);
     const modalRef = useRef<HTMLDivElement>(null);
 
-    const { isSaved, toggleSave } = useWatchlist();
+    const { 
+        isSaved, 
+        toggleSave, 
+        isPending, 
+        hasActiveProfile,
+        loading: watchlistLoading 
+    } = useWatchlist();
 
     const isTV = "name" in movie || !!(movie as any).first_air_date;
+    const mediaType = isTV ? "tv" : "movie";
 
     // Fetch TV details (seasons) if it's a TV show
     useEffect(() => {
@@ -83,6 +90,22 @@ export function MoreInfoModal({ movie, isOpen, onClose }: MoreInfoModalProps) {
         if (e.target === e.currentTarget) onClose();
     }
 
+    // Handle watchlist toggle
+    const handleWatchlistToggle = async () => {
+        if (!hasActiveProfile) {
+            return;
+        }
+
+        const title = isTV ? (movie as any).name : movie.title;
+        
+        await toggleSave({
+            id: movie.id,
+            title,
+            poster_path: movie.poster_path,
+            mediaType,
+        });
+    };
+
     if (!isOpen) return null;
 
     const releaseDate = isTV ? (movie as any).first_air_date : movie.release_date;
@@ -92,6 +115,9 @@ export function MoreInfoModal({ movie, isOpen, onClose }: MoreInfoModalProps) {
     const playLinkHref = isTV
         ? getVidSrcUrl(movie.id, "tv", selectedSeason, episodes.length > 0 ? episodes[0].episode_number : 1)
         : getVidSrcUrl(movie.id, "movie");
+
+    const isInWatchlist = isSaved(movie.id, mediaType);
+    const isWatchlistPending = isPending(movie.id, mediaType);
 
     return (
         <div
@@ -132,13 +158,23 @@ export function MoreInfoModal({ movie, isOpen, onClose }: MoreInfoModalProps) {
                             </Link>
 
                             <button
-                                onClick={() => toggleSave(movie)}
-                                className={`flex items-center gap-3 px-6 py-3 rounded-lg font-bold border-2 transition-all transform hover:scale-105 ${isSaved(movie.id)
-                                    ? "bg-green-500/20 border-green-500 text-green-500"
-                                    : "bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white"
-                                    }`}
+                                onClick={handleWatchlistToggle}
+                                disabled={!hasActiveProfile || isWatchlistPending || watchlistLoading}
+                                className={`flex items-center gap-3 px-6 py-3 rounded-lg font-bold border-2 transition-all transform hover:scale-105 ${
+                                    !hasActiveProfile
+                                        ? "bg-gray-700/50 border-gray-600 text-gray-400 cursor-not-allowed"
+                                        : isInWatchlist
+                                            ? "bg-green-500/20 border-green-500 text-green-500"
+                                            : "bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white"
+                                }`}
+                                title={!hasActiveProfile ? "Select a profile to add to your list" : isInWatchlist ? "Remove from My List" : "Add to My List"}
                             >
-                                {isSaved(movie.id) ? (
+                                {isWatchlistPending ? (
+                                    <>
+                                        <Loader2 size={24} className="animate-spin" />
+                                        <span className="text-lg">Updating...</span>
+                                    </>
+                                ) : isInWatchlist ? (
                                     <>
                                         <Check size={24} />
                                         <span className="text-lg">Saved</span>

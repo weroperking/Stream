@@ -1,10 +1,17 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import type { User, Session } from '@supabase/supabase-js';
-import { signIn as signInAction, signUp as signUpAction, signOut as signOutAction } from '@/app/actions/auth';
-import type { Profile } from '@/lib/auth-types';
+import { 
+  signIn as signInAction, 
+  signUp as signUpAction, 
+  signOut as signOutAction,
+  setActiveProfile as setActiveProfileAction,
+  getActiveProfile as getActiveProfileAction,
+  getUserProfiles as getUserProfilesAction
+} from '@/app/actions/auth';
+import type { Profile, UserProfile } from '@/lib/auth-types';
 
 // ============================================================================
 // Types
@@ -14,11 +21,14 @@ interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
+  activeUserProfile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setActiveProfile: (profileId: string) => Promise<{ success: boolean; error: Error | null }>;
+  refreshActiveProfile: () => Promise<void>;
 }
 
 // ============================================================================
@@ -35,12 +45,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [activeUserProfile, setActiveUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Create browser client
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  // Memoize the Supabase client to prevent recreation on every render
+  const supabase = useMemo(
+    () =>
+      createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      ),
+    []
   );
 
   // Initialize auth state
@@ -61,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single();
           
           setProfile(profile);
+          
+          // Fetch active user profile
+          const activeProfile = await getActiveProfileAction();
+          setActiveUserProfile(activeProfile);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -86,8 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single();
           
           setProfile(profile);
+          
+          // Fetch active user profile
+          const activeProfile = await getActiveProfileAction();
+          setActiveUserProfile(activeProfile);
         } else {
           setProfile(null);
+          setActiveUserProfile(null);
         }
         
         setLoading(false);
@@ -127,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    setActiveUserProfile(null);
   };
 
   // Refresh profile
@@ -142,15 +167,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(profile);
   };
 
+  // Set active profile
+  const setActiveProfile = async (profileId: string) => {
+    const result = await setActiveProfileAction(profileId);
+    
+    if (result.success && result.profile) {
+      setActiveUserProfile(result.profile);
+    }
+    
+    return { success: result.success, error: result.error };
+  };
+
+  // Refresh active profile
+  const refreshActiveProfile = async () => {
+    const activeProfile = await getActiveProfileAction();
+    setActiveUserProfile(activeProfile);
+  };
+
   const value: AuthContextType = {
     user,
     profile,
     session,
+    activeUserProfile,
     loading,
     signIn,
     signUp,
     signOut,
     refreshProfile,
+    setActiveProfile,
+    refreshActiveProfile,
   };
 
   return (

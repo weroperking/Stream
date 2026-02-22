@@ -1,5 +1,7 @@
 import { MediaPlayer } from "@/components/media-player";
 import { getMovieDetails } from "@/lib/tmdb";
+import { getMediaProgress } from "@/lib/watch-history-actions";
+import { getActiveProfile } from "@/app/actions/auth";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -25,6 +27,24 @@ export default async function WatchMoviePage({ params, searchParams }: WatchMovi
         notFound();
     }
 
+    // Fetch existing watch progress for the movie
+    let initialProgress = null;
+    try {
+        const activeProfile = await getActiveProfile();
+        if (activeProfile?.id) {
+            const progressResult = await getMediaProgress(
+                activeProfile.id,
+                movieId,
+                'movie'
+            );
+            if (progressResult.success && progressResult.data) {
+                initialProgress = progressResult.data;
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching watch progress:', error);
+    }
+
     return (
         <div className="min-h-screen bg-background">
             {/* Back Navigation */}
@@ -45,6 +65,7 @@ export default async function WatchMoviePage({ params, searchParams }: WatchMovi
                 title={movie.title}
                 runtime={movie.runtime}
                 preferredProvider={provider}
+                initialProgress={initialProgress}
             />
         </div>
     );

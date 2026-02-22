@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
@@ -10,17 +11,32 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
 import { 
 	User, 
 	Mail, 
 	Settings, 
 	Bell, 
 	Globe, 
-	CreditCard, 
-	Trash2,
+	CreditCard,
 	Shield,
-	Loader2
+	Loader2,
+	Save,
+	Check
 } from "lucide-react";
+import { updateAccountInfo } from "@/app/actions/auth";
+import { toast } from "sonner";
+
+// ===========================================
+// Language Options
+// ===========================================
+
+const languages = [
+	{ code: 'en', name: 'English' },
+	{ code: 'ar', name: 'العربية' },
+	{ code: 'es', name: 'Español' },
+	{ code: 'fr', name: 'Français' },
+];
 
 // ===========================================
 // Loading Skeleton
@@ -68,7 +84,27 @@ function AccountPageSkeleton() {
 
 export default function AccountPage() {
 	const router = useRouter();
-	const { user, profile, loading } = useAuth();
+	const { user, profile, loading, refreshProfile } = useAuth();
+
+	// Form state
+	const [username, setUsername] = useState('');
+	const [fullName, setFullName] = useState('');
+	const [bio, setBio] = useState('');
+	const [language, setLanguage] = useState('en');
+	const [isSaving, setIsSaving] = useState(false);
+	const [isLanguageSaving, setIsLanguageSaving] = useState(false);
+
+	// Initialize form state from profile
+	useEffect(() => {
+		if (profile) {
+			setUsername(profile.username || '');
+			setFullName(profile.full_name || '');
+			setBio(profile.bio || '');
+			// Get language from profile preferences or default to 'en'
+			const savedLanguage = (profile.preferences as Record<string, unknown>)?.language as string || 'en';
+			setLanguage(savedLanguage);
+		}
+	}, [profile]);
 
 	// Redirect to login if not authenticated
 	useEffect(() => {
@@ -106,6 +142,64 @@ export default function AccountPage() {
 				.toUpperCase()
 				.slice(0, 2)
 		: profile.email?.slice(0, 2).toUpperCase() || "U";
+
+	// Handle profile save
+	const handleSaveProfile = async () => {
+		setIsSaving(true);
+		try {
+			const result = await updateAccountInfo({
+				username: username || undefined,
+				fullName: fullName || undefined,
+				bio: bio || undefined,
+			});
+
+			if (result.success) {
+				toast.success('Profile updated successfully');
+				// Refresh the profile in auth context
+				if (refreshProfile) {
+					await refreshProfile();
+				}
+			} else {
+				toast.error(result.error || 'Failed to update profile');
+			}
+		} catch (error) {
+			console.error('Error saving profile:', error);
+			toast.error('An unexpected error occurred');
+		} finally {
+			setIsSaving(false);
+		}
+	};
+
+	// Handle language change
+	const handleLanguageChange = async (langCode: string) => {
+		setLanguage(langCode);
+		setIsLanguageSaving(true);
+		
+		try {
+			// Store in cookie for immediate effect
+			document.cookie = `locale=${langCode};path=/;max-age=31536000`;
+			
+			// Save to profile
+			const result = await updateAccountInfo({
+				language: langCode,
+			});
+
+			if (result.success) {
+				toast.success('Language preference saved');
+				// Refresh the profile in auth context
+				if (refreshProfile) {
+					await refreshProfile();
+				}
+			} else {
+				toast.error(result.error || 'Failed to save language preference');
+			}
+		} catch (error) {
+			console.error('Error saving language:', error);
+			toast.error('Failed to save language preference');
+		} finally {
+			setIsLanguageSaving(false);
+		}
+	};
 
 	return (
 		<>
@@ -167,7 +261,8 @@ export default function AccountPage() {
 										<Input
 											id="fullName"
 											placeholder="Enter your full name"
-											defaultValue={profile.full_name || ""}
+											value={fullName}
+											onChange={(e) => setFullName(e.target.value)}
 											className="bg-zinc-800 border-zinc-700 text-white placeholder:text-gray-500 focus:border-red-500 focus:ring-red-500"
 										/>
 									</div>
@@ -178,9 +273,13 @@ export default function AccountPage() {
 										<Input
 											id="username"
 											placeholder="Enter a username"
-											defaultValue={profile.username || ""}
+											value={username}
+											onChange={(e) => setUsername(e.target.value)}
 											className="bg-zinc-800 border-zinc-700 text-white placeholder:text-gray-500 focus:border-red-500 focus:ring-red-500"
 										/>
+										<p className="text-xs text-gray-500">
+											3-20 characters, letters, numbers, and underscores only
+										</p>
 									</div>
 								</div>
 
@@ -188,17 +287,33 @@ export default function AccountPage() {
 									<Label htmlFor="bio" className="text-gray-300">
 										Bio
 									</Label>
-									<Input
+									<Textarea
 										id="bio"
 										placeholder="Tell us about yourself"
-										defaultValue={profile.bio || ""}
-										className="bg-zinc-800 border-zinc-700 text-white placeholder:text-gray-500 focus:border-red-500 focus:ring-red-500"
+										value={bio}
+										onChange={(e) => setBio(e.target.value)}
+										rows={3}
+										className="bg-zinc-800 border-zinc-700 text-white placeholder:text-gray-500 focus:border-red-500 focus:ring-red-500 resize-none"
 									/>
 								</div>
 
 								<div className="flex justify-end">
-									<Button className="bg-red-600 hover:bg-red-700 text-white">
-										Save Changes
+									<Button 
+										onClick={handleSaveProfile}
+										disabled={isSaving}
+										className="bg-red-600 hover:bg-red-700 text-white min-w-[120px]"
+									>
+										{isSaving ? (
+											<>
+												<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+												Saving...
+											</>
+										) : (
+											<>
+												<Save className="w-4 h-4 mr-2" />
+												Save Changes
+											</>
+										)}
 									</Button>
 								</div>
 							</CardContent>
@@ -227,15 +342,23 @@ export default function AccountPage() {
 											</p>
 										</div>
 									</div>
-									<select 
-										className="bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:border-red-500 focus:ring-red-500"
-										defaultValue="en"
-									>
-										<option value="en">English</option>
-										<option value="ar">العربية</option>
-										<option value="es">Español</option>
-										<option value="fr">Français</option>
-									</select>
+									<div className="flex items-center gap-2">
+										{isLanguageSaving && (
+											<Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+										)}
+										<select 
+											value={language}
+											onChange={(e) => handleLanguageChange(e.target.value)}
+											disabled={isLanguageSaving}
+											className="bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:border-red-500 focus:ring-red-500 disabled:opacity-50"
+										>
+											{languages.map((lang) => (
+												<option key={lang.code} value={lang.code}>
+													{lang.name}
+												</option>
+											))}
+										</select>
+									</div>
 								</div>
 
 								<Separator className="bg-zinc-800" />
@@ -270,9 +393,11 @@ export default function AccountPage() {
 											</p>
 										</div>
 									</div>
-									<Button variant="outline" className="border-zinc-700 text-gray-300 hover:bg-zinc-800 hover:text-white">
-										Manage
-									</Button>
+									<Link href="/privacy">
+										<Button variant="outline" className="border-zinc-700 text-gray-300 hover:bg-zinc-800 hover:text-white">
+											View Privacy Policy
+										</Button>
+									</Link>
 								</div>
 							</CardContent>
 						</Card>
@@ -310,35 +435,6 @@ export default function AccountPage() {
 									<p>• Stream in HD quality</p>
 									<p>• Limited watchlist storage</p>
 									<p>• Ad-supported viewing</p>
-								</div>
-							</CardContent>
-						</Card>
-
-						{/* Danger Zone */}
-						<Card className="bg-zinc-900/50 border-zinc-800 border-red-900/50">
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2 text-red-500">
-									<Trash2 className="w-5 h-5" />
-									Danger Zone
-								</CardTitle>
-								<CardDescription className="text-gray-400">
-									Irreversible actions for your account
-								</CardDescription>
-							</CardHeader>
-							<CardContent>
-								<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 px-4 bg-red-950/20 rounded-lg border border-red-900/30">
-									<div>
-										<p className="text-white font-medium">Delete Account</p>
-										<p className="text-gray-400 text-sm">
-											Permanently delete your account and all associated data
-										</p>
-									</div>
-									<Button 
-										variant="destructive" 
-										className="bg-red-600 hover:bg-red-700 text-white"
-									>
-										Delete Account
-									</Button>
 								</div>
 							</CardContent>
 						</Card>

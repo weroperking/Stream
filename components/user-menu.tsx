@@ -9,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -22,7 +21,7 @@ import {
 
 export function UserMenu() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, activeUserProfile, signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   // Close dropdown when clicking outside
@@ -50,9 +49,10 @@ export function UserMenu() {
     router.refresh();
   };
 
-  // Get display name or username
-  const displayName = profile.full_name || profile.username || user.email?.split("@")[0] || "User";
-  const avatarUrl = profile.avatar_url;
+  // Get display name from active user profile (Netflix-style) or fall back to account profile
+  const displayName = activeUserProfile?.name || profile.full_name || profile.username || user.email?.split("@")[0] || "User";
+  // Use profile avatar (custom_avatar_url takes priority over avatar_url)
+  const avatarUrl = activeUserProfile?.custom_avatar_url || activeUserProfile?.avatar_url || profile.avatar_url;
 
   // Generate initials for avatar fallback
   const initials = displayName
@@ -88,24 +88,12 @@ export function UserMenu() {
           className="w-56 bg-zinc-900 border-zinc-800 text-white"
           sideOffset={8}
         >
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex items-center gap-3">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={avatarUrl || undefined} alt={displayName} />
-                <AvatarFallback className="bg-red-600 text-white text-sm">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{displayName}</p>
-                <p className="text-xs text-zinc-400 leading-none">
-                  {user.email}
-                </p>
-              </div>
-            </div>
-          </DropdownMenuLabel>
-
-          <DropdownMenuSeparator className="bg-zinc-800" />
+          {/* Account email header */}
+          <div className="px-3 py-2 border-b border-zinc-800">
+            <p className="text-xs text-zinc-500 leading-none truncate">
+              {user.email}
+            </p>
+          </div>
 
           <DropdownMenuItem
             className="cursor-pointer focus:bg-zinc-800 focus:text-white"

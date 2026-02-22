@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { HeroSection } from "@/components/hero-section";
 import { HorizontalMovieRow } from "@/components/horizontal-movie-row";
+import { ContinueWatchingRow } from "@/components/continue-watching-row";
 import { Navbar } from "@/components/navbar";
 import { TermsModal } from "@/components/terms-modal";
 import {
@@ -57,6 +58,9 @@ export default async function Home() {
 
         {/* Horizontal Scrollable Movie Rows - Each streams independently */}
         <div className="space-y-8 md:space-y-12 py-8 md:py-12">
+          {/* Continue Watching Section - Shows in-progress items */}
+          <ContinueWatchingRow limit={10} />
+          
           <Suspense fallback={<MovieRowSkeleton title="Trending This Week" />}>
             <TrendingRowComponent />
           </Suspense>

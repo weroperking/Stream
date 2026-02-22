@@ -16,7 +16,8 @@ import {
   updateOnboardingStep, 
   deleteUserProfile,
   updateUserProfile,
-  setDefaultProfile 
+  setDefaultProfile,
+  setActiveProfile as setActiveProfileAction
 } from '@/app/actions/auth';
 import { 
   Plus, 
@@ -27,7 +28,8 @@ import {
   Trash2,
   User,
   AlertCircle,
-  MapPin
+  MapPin,
+  Check
 } from 'lucide-react';
 
 // Default 3D avatar URLs
@@ -42,7 +44,7 @@ const DEFAULT_AVATARS = [
 
 export default function ProfilesPage() {
   const router = useRouter();
-  const { profile, refreshProfile } = useAuth();
+  const { profile, refreshProfile, loading: authLoading, user } = useAuth();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,17 +71,44 @@ export default function ProfilesPage() {
   const [editCustomImageUrl, setEditCustomImageUrl] = useState<string | null>(null);
   const [editPinLocation, setEditPinLocation] = useState('');
 
-  // Load existing profiles
+  // Track if we've already loaded profiles
+  const hasLoadedRef = useRef(false);
+
+  // Load existing profiles - wait for auth to be ready
   useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) {
+      console.log('[ProfilesPage] Waiting for auth to load...');
+      return;
+    }
+
+    // If no user after auth loads, redirect to login
+    if (!user) {
+      console.log('[ProfilesPage] No user found, redirecting to login');
+      router.push('/login');
+      return;
+    }
+
+    // Prevent multiple loads
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+
     async function loadProfiles() {
-      const userProfiles = await getUserProfiles();
-      setProfiles(userProfiles);
-      setLoading(false);
+      try {
+        console.log('[ProfilesPage] Loading profiles for user:', user.id);
+        const userProfiles = await getUserProfiles();
+        console.log('[ProfilesPage] Loaded profiles:', userProfiles?.length || 0);
+        setProfiles(userProfiles || []);
+      } catch (error) {
+        console.error('[ProfilesPage] Error loading profiles:', error);
+        setProfiles([]);
+      } finally {
+        setLoading(false);
+      }
     }
     
-    if (!loading) return;
     loadProfiles();
-  }, [loading]);
+  }, [authLoading, user, router]);
 
   // Get display URL for avatar
   const getDisplayUrl = (profile: UserProfile) => {
@@ -210,7 +239,16 @@ export default function ProfilesPage() {
     
     setSaving(true);
     
-    // Set the selected profile as the default profile for recommendations
+    // Set the selected profile as the active profile
+    const result = await setActiveProfileAction(selectedProfile.id);
+    
+    if (!result.success) {
+      setError(result.error?.message || 'Failed to set active profile');
+      setSaving(false);
+      return;
+    }
+    
+    // Also set as default profile for recommendations
     await setDefaultProfile(selectedProfile.id);
     
     if (isOnboardingMode) {
@@ -237,7 +275,8 @@ export default function ProfilesPage() {
     }
   };
 
-  if (loading) {
+  // Show loading spinner while auth or profiles are loading
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="relative">
@@ -309,6 +348,14 @@ export default function ProfilesPage() {
                         (e.target as HTMLImageElement).src = DEFAULT_AVATARS[0].url;
                       }}
                     />
+                    
+                    {/* Active Profile Indicator */}
+                    {profile.is_active && (
+                      <div className="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Active
+                      </div>
+                    )}
                     
                     {/* Selection Checkmark */}
                     {selectedProfile?.id === profile.id && (
