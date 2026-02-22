@@ -2,6 +2,8 @@
 
 import { fetchPopularMoviesAction } from "@/app/actions";
 import { SearchModal } from "@/components/search-modal";
+import { UserMenu } from "@/components/user-menu";
+import { useAuth } from "@/components/providers/auth-provider";
 import type { Movie } from "@/lib/tmdb";
 import {
 	Menu,
@@ -12,12 +14,14 @@ import {
 	Tv,
 	List,
 	Bookmark,
-	Calendar
+	Calendar,
+	LogIn
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Button } from "./ui/button";
 
 export function Navbar() {
 	const pathname = usePathname();
@@ -25,6 +29,7 @@ export function Navbar() {
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [trendingMovies, setTrendingMovies] = useState<Movie[]>([]);
 	const router = useRouter();
+	const { user, loading } = useAuth();
 
 	// Pre-fetch trending/popular movies for instant search load
 	useEffect(() => {
@@ -100,8 +105,8 @@ export function Navbar() {
 						})}
 					</div>
 
-					{/* Right Side: Search & Mobile Menu */}
-					<div className="flex items-center gap-4 pl-4 border-l border-white/10">
+					{/* Right Side: Search, User Menu & Mobile Menu */}
+					<div className="flex items-center gap-2 pl-4 border-l border-white/10">
 						<button
 							onClick={() => setIsSearchOpen(true)}
 							className="flex items-center gap-2 px-4 lg:px-6 py-2.5 rounded-full bg-gradient-to-r from-primary/80 to-accent/80 hover:from-primary hover:to-accent text-white text-sm font-medium transition-all shadow-lg hover:shadow-primary/25 group whitespace-nowrap"
@@ -109,6 +114,24 @@ export function Navbar() {
 							<span className="hidden sm:inline">Search</span>
 							<Search size={16} className="group-hover:scale-110 transition-transform" />
 						</button>
+
+						{/* User Menu - Show for logged in users */}
+						{!loading && user && (
+							<UserMenu />
+						)}
+
+						{/* Login Button - Show for non-logged in users */}
+						{!loading && !user && (
+							<Link href="/login">
+								<Button
+									variant="ghost"
+									className="flex items-center gap-2 px-4 text-zinc-300 hover:text-white"
+								>
+									<LogIn size={16} />
+									<span className="hidden sm:inline">Sign In</span>
+								</Button>
+							</Link>
+						)}
 
 						<button
 							onClick={() => setIsOpen(!isOpen)}

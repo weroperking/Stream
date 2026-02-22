@@ -46,7 +46,7 @@ export function GlobalFooter() {
 							unlimited entertainment without any subscription.
 						</p>
 						<p className="text-zinc-500 text-xs">
-							© {currentYear} Stream. All rights reserved.
+							© {currentYear} Invenio. All rights reserved.
 						</p>
 					</div>
 

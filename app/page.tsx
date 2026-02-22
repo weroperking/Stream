@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { HeroSection } from "@/components/hero-section";
 import { HorizontalMovieRow } from "@/components/horizontal-movie-row";
 import { Navbar } from "@/components/navbar";
@@ -10,10 +11,76 @@ import {
 	getTopRatedMovies,
 	getUpcomingMovies,
 } from "@/lib/tmdb";
+import { createClient } from "@/lib/supabase-server";
 
 // ===========================================
-// Skeleton Components (Inline Fallbacks)
+// Server-side Authentication Check
 // ===========================================
+
+export default async function Home() {
+  // Check authentication server-side
+  const supabase = await createClient();
+  
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  // If not authenticated, redirect to landing page
+  if (authError || !user) {
+    redirect('/landing');
+  }
+  
+  // Get profile to check onboarding status
+  // Use current_step (not onboarding_step) to match database schema
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('onboarding_completed, current_step')
+    .eq('id', user!.id)
+    .single();
+  
+  const onboardingCompleted = profile?.onboarding_completed ?? false;
+  
+  // If authenticated but onboarding not completed, redirect to onboarding
+  if (!onboardingCompleted) {
+    redirect('/profiles');
+  }
+  
+  // User is authenticated and onboarding is completed - show homepage
+  return (
+    <>
+      <Navbar />
+      <TermsModal />
+
+      <main className="bg-black min-h-screen">
+        {/* Hero Section - Streams independently */}
+        <Suspense fallback={<HeroSkeleton />}>
+          <HeroSectionComponent />
+        </Suspense>
+
+        {/* Horizontal Scrollable Movie Rows - Each streams independently */}
+        <div className="space-y-8 md:space-y-12 py-8 md:py-12">
+          <Suspense fallback={<MovieRowSkeleton title="Trending This Week" />}>
+            <TrendingRowComponent />
+          </Suspense>
+          
+          <Suspense fallback={<MovieRowSkeleton title="Popular on Stream" />}>
+            <PopularRowComponent />
+          </Suspense>
+          
+          <Suspense fallback={<MovieRowSkeleton title="New Releases" />}>
+            <LatestRowComponent />
+          </Suspense>
+          
+          <Suspense fallback={<MovieRowSkeleton title="Top Rated" />}>
+            <TopRatedRowComponent />
+          </Suspense>
+          
+          <Suspense fallback={<MovieRowSkeleton title="Coming Soon" />}>
+            <UpcomingRowComponent />
+          </Suspense>
+        </div>
+      </main>
+    </>
+  );
+}
 
 function HeroSkeleton() {
 	return (
@@ -117,44 +184,5 @@ async function UpcomingRowComponent() {
 }
 
 // ===========================================
-// Main Page Component
+// End of Home Page
 // ===========================================
-
-export default function Home() {
-	return (
-		<>
-			<Navbar />
-			<TermsModal />
-
-			<main className="bg-black min-h-screen">
-				{/* Hero Section - Streams independently */}
-				<Suspense fallback={<HeroSkeleton />}>
-					<HeroSectionComponent />
-				</Suspense>
-
-				{/* Horizontal Scrollable Movie Rows - Each streams independently */}
-				<div className="space-y-8 md:space-y-12 py-8 md:py-12">
-					<Suspense fallback={<MovieRowSkeleton title="Trending This Week" />}>
-						<TrendingRowComponent />
-					</Suspense>
-					
-					<Suspense fallback={<MovieRowSkeleton title="Popular on Stream" />}>
-						<PopularRowComponent />
-					</Suspense>
-					
-					<Suspense fallback={<MovieRowSkeleton title="New Releases" />}>
-						<LatestRowComponent />
-					</Suspense>
-					
-					<Suspense fallback={<MovieRowSkeleton title="Top Rated" />}>
-						<TopRatedRowComponent />
-					</Suspense>
-					
-					<Suspense fallback={<MovieRowSkeleton title="Coming Soon" />}>
-						<UpcomingRowComponent />
-					</Suspense>
-				</div>
-			</main>
-		</>
-	);
-}
