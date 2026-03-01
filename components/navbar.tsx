@@ -1,7 +1,7 @@
 "use client";
 
 import { fetchPopularMoviesAction } from "@/app/actions";
-import { SearchModal } from "@/components/search-modal";
+import dynamic from 'next/dynamic';
 import { UserMenu } from "@/components/user-menu";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { Movie } from "@/lib/tmdb";
@@ -22,6 +22,8 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
+
+const SearchModal = dynamic(() => import('@/components/search-modal'), { ssr: false });
 
 export function Navbar() {
 	const pathname = usePathname();

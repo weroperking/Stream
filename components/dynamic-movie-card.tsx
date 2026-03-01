@@ -1,13 +1,15 @@
 "use client";
 
-import { MoreInfoModal } from "@/components/more-info-modal";
+import dynamic from 'next/dynamic';
 import { useWatchlist } from "@/hooks/use-watchlist";
 import type { Movie, TVShow } from "@/lib/tmdb";
-import { getCertification, getImageUrl } from "@/lib/tmdb";
+import { getImageUrl } from "@/lib/tmdb";
 import { Bookmark, Info, Play, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState, memo } from "react";
+
+const MoreInfoModal = dynamic(() => import('@/components/more-info-modal'), { ssr: false });
 
 type MediaType = "movie" | "tv";
 
@@ -41,57 +43,8 @@ function getPosterPath(item: Movie | TVShow): string | null {
 	return item.poster_path;
 }
 
-// Certification badge styling based on rating
-function getCertificationStyle(certification: string): {
-	background: string;
-	borderColor: string;
-	textColor: string;
-} {
-	const cert = certification.toUpperCase();
-
-	switch (cert) {
-		case "G":
-		case "TV-G":
-			return {
-				background: "bg-green-500",
-				borderColor: "border-green-400",
-				textColor: "text-white",
-			};
-		case "PG":
-		case "TV-PG":
-			return {
-				background: "bg-yellow-500",
-				borderColor: "border-yellow-400",
-				textColor: "text-black",
-			};
-		case "PG-13":
-		case "TV-14":
-			return {
-				background: "bg-orange-500",
-				borderColor: "border-orange-400",
-				textColor: "text-white",
-			};
-		case "R":
-		case "NC-17":
-		case "TV-MA":
-			return {
-				background: "bg-red-600",
-				borderColor: "border-red-500",
-				textColor: "text-white",
-			};
-		default:
-			return {
-				background: "bg-gray-600",
-				borderColor: "border-gray-500",
-				textColor: "text-white",
-			};
-	}
-}
-
-export function DynamicMovieCard({ movie, type, priority = false }: DynamicMovieCardProps) {
+function DynamicMovieCardComponent({ movie, type, priority = false }: DynamicMovieCardProps) {
 	const [showModal, setShowModal] = useState(false);
-	const [certification, setCertification] = useState<string | null>(null);
-	const [isLoadingCert, setIsLoadingCert] = useState(true);
 
 	const mediaType = getMediaType(movie, type);
 	const title = getTitle(movie);
@@ -102,35 +55,6 @@ export function DynamicMovieCard({ movie, type, priority = false }: DynamicMovie
 	const saved = isSaved(movie.id);
 
 	const linkHref = mediaType === "tv" ? `/tv/${movie.id}` : `/movie/${movie.id}`;
-
-	// Fetch certification on mount
-	useEffect(() => {
-		let mounted = true;
-
-		async function fetchCertification() {
-			try {
-				const cert = await getCertification(movie.id, mediaType);
-				if (mounted) {
-					setCertification(cert);
-				}
-			} catch (error) {
-				console.error("Error fetching certification:", error);
-			} finally {
-				if (mounted) {
-					setIsLoadingCert(false);
-				}
-			}
-		}
-
-		fetchCertification();
-
-		return () => {
-			mounted = false;
-		};
-	}, [movie.id, mediaType]);
-
-	const certStyle = certification ? getCertificationStyle(certification) : null;
-	const hasCertification = !!certification && !isLoadingCert;
 
 	return (
 		<>
@@ -146,39 +70,13 @@ export function DynamicMovieCard({ movie, type, priority = false }: DynamicMovie
 							sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
 						/>
 
-						{/* Certification Badge - Primary Visual Element */}
-						<div className="absolute top-2 left-2 z-20">
-							{hasCertification && certStyle ? (
-								<span
-									className={`
-										${certStyle.background} ${certStyle.textColor}
-										px-2 py-0.5 text-xs font-bold rounded border
-										${certStyle.borderColor} shadow-lg
-										drop-shadow-md
-									`}
-								>
-									{certification}
-								</span>
-							) : (
-								// Show rating prominently if no certification
-								<div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded border border-yellow-400/50">
-									<Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-									<span className="text-xs font-bold text-white">
-										{movie.vote_average.toFixed(1)}
-									</span>
-								</div>
-							)}
+						{/* Rating Badge */}
+						<div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded border border-yellow-400/50">
+							<Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+							<span className="text-xs font-bold text-white">
+								{movie.vote_average ? movie.vote_average.toFixed(1) : "N/A"}
+							</span>
 						</div>
-
-						{/* Rating Badge - Secondary (when certification exists) */}
-						{hasCertification && (
-							<div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded border border-yellow-400/30">
-								<Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-								<span className="text-xs font-medium text-white">
-									{movie.vote_average.toFixed(1)}
-								</span>
-							</div>
-						)}
 
 						{/* Overlay on hover */}
 						<div className="absolute inset-0 bg-gradient-overlay opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out flex flex-col justify-end p-4">
@@ -249,3 +147,5 @@ export function DynamicMovieCard({ movie, type, priority = false }: DynamicMovie
 		</>
 	);
 }
+
+export const DynamicMovieCard = memo(DynamicMovieCardComponent);
