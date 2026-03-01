@@ -2,16 +2,6 @@
 @import "tw-animate-css";
 
 @font-face {
-    font-family: "Benguiat";
-    src: url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.eot");
-    src: url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.eot?#iefix") format("embedded-opentype"),
-    url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.woff2") format("woff2"),
-    url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.woff") format("woff"),
-    url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.ttf") format("truetype"),
-    url("https://db.onlinewebfonts.com/t/ce467b055ee6a280c5d588699b0a514e.svg#Benguiat") format("svg");
-}
-
-@font-face {
     font-family: 'DEEPLY ROOTED';
     src: url('/fonts/DEEPLY-ROOTED-DEMO-BF698afe7f9282d.otf') format('opentype'),
          url('/fonts/DEEPLY-ROOTED-DEMO-BF698afe80352d5.ttf') format('truetype');

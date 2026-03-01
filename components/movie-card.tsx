@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreInfoModal } from "@/components/more-info-modal";
+import dynamic from 'next/dynamic';
 import { useWatchlist } from "@/hooks/use-watchlist";
 import type { Movie } from "@/lib/tmdb";
 import { getImageUrl } from "@/lib/tmdb";
@@ -8,6 +8,9 @@ import { Bookmark, Info, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { memo } from "react";
+
+const MoreInfoModal = dynamic(() => import('@/components/more-info-modal'), { ssr: false });
 
 interface MovieCardProps {
 	movie: Movie;
@@ -15,7 +18,7 @@ interface MovieCardProps {
 
 import { useRouter } from "next/navigation";
 
-export function MovieCard({ movie }: MovieCardProps) {
+export const MovieCard = memo(function MovieCard({ movie }: MovieCardProps) {
 	const [showModal, setShowModal] = useState(false);
 	const router = useRouter();
 
@@ -105,4 +108,4 @@ export function MovieCard({ movie }: MovieCardProps) {
 			/>
 		</>
 	);
-}
+});

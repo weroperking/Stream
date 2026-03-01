@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/carousel";
 import type { Movie } from "@/lib/tmdb";
 import { getMovieImages, getLogoImageUrl } from "@/lib/tmdb";
-import { MoreInfoModal } from "@/components/more-info-modal";
+import dynamic from 'next/dynamic';
 import { getBackdropUrl } from "@/lib/tmdb";
 import { Play } from "lucide-react";
 import Image from "next/image";
@@ -25,6 +25,8 @@ interface HeroSectionProps {
 interface MovieWithLogo extends Movie {
 	logoPath?: string;
 }
+
+const MoreInfoModal = dynamic(() => import('@/components/more-info-modal'), { ssr: false });
 
 export function HeroSection({ movies }: HeroSectionProps) {
 	const [api, setApi] = React.useState<CarouselApi>();
@@ -94,16 +96,7 @@ export function HeroSection({ movies }: HeroSectionProps) {
 						return (
 							<CarouselItem key={movie.id}>
 								<div 
-									className="relative w-full h-[500px] md:h-[600px] overflow-hidden transition-all duration-700"
-									onMouseMove={(e) => {
-										const rect = e.currentTarget.getBoundingClientRect();
-										const x = ((e.clientX - rect.left) / rect.width - 0.5) * 12;
-										const y = ((e.clientY - rect.top) / rect.height - 0.5) * 8;
-										e.currentTarget.style.transform = `perspective(1200px) rotateX(${-y}deg) rotateY(${x}deg) scale3d(1.05, 1.05, 1.05)`;
-									}}
-									onMouseLeave={(e) => {
-										e.currentTarget.style.transform = "perspective(1200px) rotateX(0) rotateY(0) scale3d(1, 1, 1)";
-									}}
+									className="relative w-full h-[500px] md:h-[600px] overflow-hidden will-change-transform"
 								>
 									<Link href={`/movie/${movie.id}`} className="absolute inset-0 z-10 block">
 										<span className="sr-only">Watch {movie.title}</span>
